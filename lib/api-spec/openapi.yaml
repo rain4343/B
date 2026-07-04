@@ -527,6 +527,19 @@ paths:
                   $ref: "#/components/schemas/UserWithRoles"
 
   # ── Documents ─────────────────────────────────────────────────
+  /documents/next-number:
+    get:
+      operationId: getNextDocumentNumber
+      tags: [documents]
+      summary: Get suggested next document number
+      responses:
+        "200":
+          description: Suggested next document number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NextDocumentNumber"
+
   /documents:
     get:
       operationId: listDocuments
@@ -555,11 +568,11 @@ paths:
     post:
       operationId: createDocument
       tags: [documents]
-      summary: Create a document
+      summary: Create a document (multipart/form-data with PDF attachment)
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               $ref: "#/components/schemas/DocumentInput"
       responses:
@@ -571,6 +584,12 @@ paths:
                 $ref: "#/components/schemas/Document"
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
           content:
             application/json:
               schema:
@@ -931,9 +950,16 @@ components:
           type: string
           format: date-time
 
+    NextDocumentNumber:
+      type: object
+      required: [next_number]
+      properties:
+        next_number:
+          type: string
+
     DocumentInput:
       type: object
-      required: [document_number, document_date, subject, creator_id, file_path]
+      required: [document_number, document_date, subject, attachment]
       properties:
         document_number:
           type: string
@@ -946,15 +972,12 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        creator_id:
-          type: integer
+        attachment:
+          type: string
+          format: binary
         current_status:
           type: string
           maxLength: 50
-        file_path:
-          type: string
-          minLength: 1
-          maxLength: 500
 
     DocumentUpdate:
       type: object
@@ -970,15 +993,9 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-        creator_id:
-          type: integer
         current_status:
           type: string
           maxLength: 50
-        file_path:
-          type: string
-          minLength: 1
-          maxLength: 500
 
     DocumentLog:
       type: object

@@ -34,6 +34,7 @@ import type {
   HealthStatus,
   ListDocumentsParams,
   ListUsersParams,
+  NextDocumentNumber,
   Role,
   RoleAssignment,
   RoleCount,
@@ -1707,6 +1708,83 @@ export function useGetRecentStaff<TData = Awaited<ReturnType<typeof getRecentSta
 
 
 
+export const getGetNextDocumentNumberUrl = () => {
+
+
+
+
+  return `/api/documents/next-number`
+}
+
+/**
+ * @summary Get suggested next document number
+ */
+export const getNextDocumentNumber = async ( options?: RequestInit): Promise<NextDocumentNumber> => {
+
+  return customFetch<NextDocumentNumber>(getGetNextDocumentNumberUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNextDocumentNumberQueryKey = () => {
+    return [
+    `/api/documents/next-number`
+    ] as const;
+    }
+
+
+export const getGetNextDocumentNumberQueryOptions = <TData = Awaited<ReturnType<typeof getNextDocumentNumber>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextDocumentNumber>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNextDocumentNumberQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNextDocumentNumber>>> = ({ signal }) => getNextDocumentNumber({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNextDocumentNumber>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNextDocumentNumberQueryResult = NonNullable<Awaited<ReturnType<typeof getNextDocumentNumber>>>
+export type GetNextDocumentNumberQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get suggested next document number
+ */
+
+export function useGetNextDocumentNumber<TData = Awaited<ReturnType<typeof getNextDocumentNumber>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextDocumentNumber>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNextDocumentNumberQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListDocumentsUrl = (params?: ListDocumentsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1800,16 +1878,24 @@ export const getCreateDocumentUrl = () => {
 }
 
 /**
- * @summary Create a document
+ * @summary Create a document (multipart/form-data with PDF attachment)
  */
 export const createDocument = async (documentInput: DocumentInput, options?: RequestInit): Promise<Document> => {
+    const formData = new FormData();
+formData.append(`document_number`, documentInput.document_number);
+formData.append(`document_date`, documentInput.document_date);
+formData.append(`subject`, documentInput.subject);
+formData.append(`attachment`, documentInput.attachment);
+if(documentInput.current_status !== undefined) {
+ formData.append(`current_status`, documentInput.current_status);
+ }
 
   return customFetch<Document>(getCreateDocumentUrl(),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(documentInput)
+    method: 'POST'
+    ,
+    body: formData
   }
 );}
 
@@ -1848,7 +1934,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateDocumentMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Create a document
+ * @summary Create a document (multipart/form-data with PDF attachment)
  */
 export const useCreateDocument = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDocument>>, TError,{data: BodyType<DocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

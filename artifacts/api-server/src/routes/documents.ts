@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { eq, ilike, and, desc, type SQL } from "drizzle-orm";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { db, documentsTable, documentLogsTable, usersTable } from "@workspace/db";
 import {
-  CreateDocumentBody,
   UpdateDocumentBody,
   GetDocumentParams,
   UpdateDocumentParams,
@@ -12,9 +14,35 @@ import {
   CreateDocumentLogBody,
   ListDocumentsQueryParams,
 } from "@workspace/api-zod";
-
 const router = Router();
 
+// ── File upload setup ─────────────────────────────────────────
+const uploadDir = path.join(process.cwd(), "uploads", "attachments");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: uploadDir,
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname).toLowerCase() || ".pdf";
+    cb(null, `${unique}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("PDF files only"));
+    }
+  },
+});
+
+
+// ── Helpers ───────────────────────────────────────────────────
 async function getDocumentWithCreator(id: number) {
   const [doc] = await db
     .select({
@@ -36,6 +64,26 @@ async function getDocumentWithCreator(id: number) {
   return doc;
 }
 
+// ── Routes ────────────────────────────────────────────────────
+
+// GET /documents/next-number
+// Must be registered before /documents/:id to avoid route conflict
+router.get("/documents/next-number", async (_req, res) => {
+  const [last] = await db
+    .select({ document_number: documentsTable.document_number })
+    .from(documentsTable)
+    .orderBy(desc(documentsTable.id))
+    .limit(1);
+
+  let nextNum = 1;
+  if (last) {
+    const match = last.document_number.match(/(\d+)$/);
+    if (match) nextNum = parseInt(match[1], 10) + 1;
+  }
+
+  return res.json({ next_number: String(nextNum).padStart(3, "0") });
+});
+
 // GET /documents
 router.get("/documents", async (req, res) => {
   const parsed = ListDocumentsQueryParams.safeParse(req.query);
@@ -43,12 +91,8 @@ router.get("/documents", async (req, res) => {
   const { search, status } = parsed.data;
 
   const conditions: SQL[] = [];
-  if (search) {
-    conditions.push(ilike(documentsTable.subject, `%${search}%`));
-  }
-  if (status) {
-    conditions.push(eq(documentsTable.current_status, status));
-  }
+  if (search) conditions.push(ilike(documentsTable.subject, `%${search}%`));
+  if (status) conditions.push(eq(documentsTable.current_status, status));
 
   const rows = await db
     .select({
@@ -71,26 +115,46 @@ router.get("/documents", async (req, res) => {
   return res.json(rows);
 });
 
-// POST /documents
-router.post("/documents", async (req, res) => {
-  const parsed = CreateDocumentBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+// POST /documents — multipart/form-data with PDF attachment
+router.post("/documents", upload.single("attachment"), async (req, res) => {
+  const creatorId = req.session?.userId;
+  if (!creatorId) return res.status(401).json({ error: "Authentication required" });
 
-  const [creator] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, parsed.data.creator_id)).limit(1);
-  if (!creator) return res.status(400).json({ error: "Creator user does not exist" });
+  if (!req.file) return res.status(400).json({ error: "PDF attachment is required" });
 
-  const [existing] = await db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.document_number, parsed.data.document_number)).limit(1);
+  const { document_number, document_date, subject, current_status } = req.body as Record<string, string>;
+  if (!document_number?.trim() || !document_date?.trim() || !subject?.trim()) {
+    return res.status(400).json({ error: "document_number, document_date, and subject are required" });
+  }
+  if (document_number.length > 100 || subject.length > 255) {
+    return res.status(400).json({ error: "Field exceeds maximum length" });
+  }
+
+  const [existing] = await db
+    .select({ id: documentsTable.id })
+    .from(documentsTable)
+    .where(eq(documentsTable.document_number, document_number.trim()))
+    .limit(1);
   if (existing) return res.status(409).json({ error: "Document number already exists" });
 
-  const [doc] = await db.insert(documentsTable).values({
-    ...parsed.data,
-    document_date: parsed.data.document_date.toISOString().slice(0, 10),
-  }).returning();
+  const filePath = `attachments/${req.file.filename}`;
+
+  const [doc] = await db
+    .insert(documentsTable)
+    .values({
+      document_number: document_number.trim(),
+      document_date: new Date(document_date.trim()).toISOString().slice(0, 10),
+      subject: subject.trim(),
+      file_path: filePath,
+      creator_id: creatorId,
+      current_status: current_status?.trim() || "نوێ",
+    })
+    .returning();
 
   await db.insert(documentLogsTable).values({
     document_id: doc.id,
-    user_id: req.session?.userId ?? null,
-    action: "دروستکرا",
+    user_id: creatorId,
+    action: "نوسراوەکە دروستکرا",
     notes: null,
   });
 
@@ -116,19 +180,33 @@ router.patch("/documents/:id", async (req, res) => {
   const parsed = UpdateDocumentBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
 
-  const [exists] = await db.select({ id: documentsTable.id, current_status: documentsTable.current_status }).from(documentsTable).where(eq(documentsTable.id, paramParsed.data.id)).limit(1);
+  const [exists] = await db
+    .select({ id: documentsTable.id, current_status: documentsTable.current_status })
+    .from(documentsTable)
+    .where(eq(documentsTable.id, paramParsed.data.id))
+    .limit(1);
   if (!exists) return res.status(404).json({ error: "Document not found" });
 
   if (parsed.data.document_number) {
-    const [dup] = await db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.document_number, parsed.data.document_number)).limit(1);
-    if (dup && dup.id !== paramParsed.data.id) return res.status(409).json({ error: "Document number already exists" });
+    const [dup] = await db
+      .select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(eq(documentsTable.document_number, parsed.data.document_number))
+      .limit(1);
+    if (dup && dup.id !== paramParsed.data.id)
+      return res.status(409).json({ error: "Document number already exists" });
   }
 
-  await db.update(documentsTable).set({
-    ...parsed.data,
-    document_date: parsed.data.document_date ? parsed.data.document_date.toISOString().slice(0, 10) : undefined,
-    updated_at: new Date(),
-  }).where(eq(documentsTable.id, paramParsed.data.id));
+  await db
+    .update(documentsTable)
+    .set({
+      ...parsed.data,
+      document_date: parsed.data.document_date
+        ? parsed.data.document_date.toISOString().slice(0, 10)
+        : undefined,
+      updated_at: new Date(),
+    })
+    .where(eq(documentsTable.id, paramParsed.data.id));
 
   if (parsed.data.current_status && parsed.data.current_status !== exists.current_status) {
     await db.insert(documentLogsTable).values({
@@ -155,7 +233,10 @@ router.delete("/documents/:id", async (req, res) => {
   const parsed = DeleteDocumentParams.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ error: "Invalid document ID" });
 
-  const [doc] = await db.delete(documentsTable).where(eq(documentsTable.id, parsed.data.id)).returning();
+  const [doc] = await db
+    .delete(documentsTable)
+    .where(eq(documentsTable.id, parsed.data.id))
+    .returning();
   if (!doc) return res.status(404).json({ error: "Document not found" });
   return res.status(204).send();
 });
@@ -165,7 +246,11 @@ router.get("/documents/:id/logs", async (req, res) => {
   const parsed = ListDocumentLogsParams.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ error: "Invalid document ID" });
 
-  const [doc] = await db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.id, parsed.data.id)).limit(1);
+  const [doc] = await db
+    .select({ id: documentsTable.id })
+    .from(documentsTable)
+    .where(eq(documentsTable.id, parsed.data.id))
+    .limit(1);
   if (!doc) return res.status(404).json({ error: "Document not found" });
 
   const logs = await db
@@ -181,7 +266,7 @@ router.get("/documents/:id/logs", async (req, res) => {
     .from(documentLogsTable)
     .leftJoin(usersTable, eq(documentLogsTable.user_id, usersTable.id))
     .where(eq(documentLogsTable.document_id, parsed.data.id))
-    .orderBy(desc(documentLogsTable.timestamp));
+    .orderBy(documentLogsTable.timestamp); // asc — oldest first, matching original model
 
   return res.json(logs);
 });
@@ -194,15 +279,22 @@ router.post("/documents/:id/logs", async (req, res) => {
   const parsed = CreateDocumentLogBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
 
-  const [doc] = await db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.id, paramParsed.data.id)).limit(1);
+  const [doc] = await db
+    .select({ id: documentsTable.id })
+    .from(documentsTable)
+    .where(eq(documentsTable.id, paramParsed.data.id))
+    .limit(1);
   if (!doc) return res.status(404).json({ error: "Document not found" });
 
-  const [log] = await db.insert(documentLogsTable).values({
-    document_id: paramParsed.data.id,
-    user_id: req.session?.userId ?? null,
-    action: parsed.data.action,
-    notes: parsed.data.notes ?? null,
-  }).returning();
+  const [log] = await db
+    .insert(documentLogsTable)
+    .values({
+      document_id: paramParsed.data.id,
+      user_id: req.session?.userId ?? null,
+      action: parsed.data.action,
+      notes: parsed.data.notes ?? null,
+    })
+    .returning();
 
   return res.status(201).json(log);
 });

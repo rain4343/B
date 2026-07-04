@@ -138,6 +138,10 @@ export interface Document {
   updated_at: string;
 }
 
+export interface NextDocumentNumber {
+  next_number: string;
+}
+
 export interface DocumentInput {
   /**
      * @minLength 1
@@ -150,14 +154,9 @@ export interface DocumentInput {
      * @maxLength 255
      */
   subject: string;
-  creator_id: number;
+  attachment: Blob;
   /** @maxLength 50 */
   current_status?: string;
-  /**
-     * @minLength 1
-     * @maxLength 500
-     */
-  file_path: string;
 }
 
 export interface DocumentUpdate {
@@ -172,14 +171,8 @@ export interface DocumentUpdate {
      * @maxLength 255
      */
   subject?: string;
-  creator_id?: number;
   /** @maxLength 50 */
   current_status?: string;
-  /**
-     * @minLength 1
-     * @maxLength 500
-     */
-  file_path?: string;
 }
 
 export interface DocumentLog {

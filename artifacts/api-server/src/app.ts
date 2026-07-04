@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import session from "express-session";
 import pinoHttp from "pino-http";
+import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -53,6 +54,9 @@ app.use(
     },
   }),
 );
+
+// Serve uploaded files — accessible at /api/uploads/attachments/<filename>
+app.use("/api/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/api", router);
 

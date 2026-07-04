@@ -20,6 +20,7 @@ export * from './errorResponse';
 export * from './healthStatus';
 export * from './listDocumentsParams';
 export * from './listUsersParams';
+export * from './nextDocumentNumber';
 export * from './role';
 export * from './roleAssignment';
 export * from './roleCount';

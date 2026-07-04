@@ -411,6 +411,14 @@ export const GetRecentStaffResponse = zod.array(GetRecentStaffResponseItem)
 
 
 /**
+ * @summary Get suggested next document number
+ */
+export const GetNextDocumentNumberResponse = zod.object({
+  "next_number": zod.string()
+})
+
+
+/**
  * @summary List all documents
  */
 export const ListDocumentsQueryParams = zod.object({
@@ -434,7 +442,7 @@ export const ListDocumentsResponse = zod.array(ListDocumentsResponseItem)
 
 
 /**
- * @summary Create a document
+ * @summary Create a document (multipart/form-data with PDF attachment)
  */
 export const createDocumentBodyDocumentNumberMax = 100;
 
@@ -442,17 +450,14 @@ export const createDocumentBodySubjectMax = 255;
 
 export const createDocumentBodyCurrentStatusMax = 50;
 
-export const createDocumentBodyFilePathMax = 500;
-
 
 
 export const CreateDocumentBody = zod.object({
   "document_number": zod.string().min(1).max(createDocumentBodyDocumentNumberMax),
   "document_date": zod.coerce.date(),
   "subject": zod.string().min(1).max(createDocumentBodySubjectMax),
-  "creator_id": zod.number(),
-  "current_status": zod.string().max(createDocumentBodyCurrentStatusMax).optional(),
-  "file_path": zod.string().min(1).max(createDocumentBodyFilePathMax)
+  "attachment": zod.instanceof(File),
+  "current_status": zod.string().max(createDocumentBodyCurrentStatusMax).optional()
 })
 
 export const CreateDocumentResponse = zod.object({
@@ -503,17 +508,13 @@ export const updateDocumentBodySubjectMax = 255;
 
 export const updateDocumentBodyCurrentStatusMax = 50;
 
-export const updateDocumentBodyFilePathMax = 500;
-
 
 
 export const UpdateDocumentBody = zod.object({
   "document_number": zod.string().min(1).max(updateDocumentBodyDocumentNumberMax).optional(),
   "document_date": zod.coerce.date().optional(),
   "subject": zod.string().min(1).max(updateDocumentBodySubjectMax).optional(),
-  "creator_id": zod.number().optional(),
-  "current_status": zod.string().max(updateDocumentBodyCurrentStatusMax).optional(),
-  "file_path": zod.string().min(1).max(updateDocumentBodyFilePathMax).optional()
+  "current_status": zod.string().max(updateDocumentBodyCurrentStatusMax).optional()
 })
 
 export const UpdateDocumentResponse = zod.object({

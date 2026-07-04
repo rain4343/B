@@ -18,12 +18,6 @@ export interface DocumentUpdate {
      * @maxLength 255
      */
   subject?: string;
-  creator_id?: number;
   /** @maxLength 50 */
   current_status?: string;
-  /**
-     * @minLength 1
-     * @maxLength 500
-     */
-  file_path?: string;
 }
