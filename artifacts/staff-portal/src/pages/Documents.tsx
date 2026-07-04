@@ -14,13 +14,15 @@ const ku: React.CSSProperties = { fontFamily: "'Noto Kufi Arabic', sans-serif" }
 
 const statusOptions = ["نوێ", "لە پێداچوونەوەدایە", "پەسەندکراوە", "ڕەتکراوەتەوە", "کۆتاییهاتووە"];
 
-const statusColor: Record<string, string> = {
-  "نوێ": "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  "لە پێداچوونەوەدایە": "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  "پەسەندکراوە": "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-  "ڕەتکراوەتەوە": "bg-destructive/10 text-destructive border-destructive/20",
-  "کۆتاییهاتووە": "bg-muted text-muted-foreground border-border",
-};
+// Matches original Blade str_contains logic:
+// contains ئاڕاستەکرا → warning/amber
+// contains ئەنجامدرا  → success/green
+// else                → info/blue
+function statusBadgeClass(status: string): string {
+  if (status.includes("ئاڕاستەکرا")) return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+  if (status.includes("ئەنجامدرا"))  return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+  return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+}
 
 export default function Documents() {
   const [search, setSearch] = useState("");
@@ -101,19 +103,19 @@ export default function Documents() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-muted-foreground text-xs border-b border-t">
                 <tr>
-                  <th className="px-4 py-3 font-medium text-right">ژمارە</th>
+                  <th className="px-4 py-3 font-medium text-right">ژ. نوسراو</th>
+                  <th className="px-4 py-3 font-medium text-right">ڕێکەوت</th>
                   <th className="px-4 py-3 font-medium text-right">بابەت</th>
-                  <th className="px-4 py-3 font-medium text-right">بەروار</th>
                   <th className="px-4 py-3 font-medium text-right">دروستکەر</th>
-                  <th className="px-4 py-3 font-medium text-right">دۆخ</th>
-                  <th className="px-4 py-3 font-medium text-right">کردارەکان</th>
+                  <th className="px-4 py-3 font-medium text-right">دواین حاڵەت</th>
+                  <th className="px-4 py-3 font-medium text-right">کردار</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {isLoading ? (
                   <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">چاوەڕێ بکە...</td></tr>
                 ) : !documents?.length ? (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">هیچ بەڵگەنامەیەک نەدۆزرایەوە!</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">هیچ نوسراوێک نەدۆزرایەوە!</td></tr>
                 ) : (
                   documents.map((doc) => (
                     <tr key={doc.id} className="hover:bg-muted/30 transition-colors group">
@@ -122,13 +124,13 @@ export default function Documents() {
                           {doc.document_number}
                         </Link>
                       </td>
-                      <td className="px-4 py-4 text-right text-foreground">{doc.subject}</td>
                       <td className="px-4 py-4 text-right text-muted-foreground">
                         {format(new Date(doc.document_date), "yyyy-MM-dd")}
                       </td>
+                      <td className="px-4 py-4 text-right text-foreground">{doc.subject}</td>
                       <td className="px-4 py-4 text-right text-muted-foreground">{doc.creator_name || "—"}</td>
                       <td className="px-4 py-4 text-right">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${statusColor[doc.current_status] || "bg-muted text-muted-foreground border-border"}`}>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${statusBadgeClass(doc.current_status)}`}>
                           {doc.current_status}
                         </span>
                       </td>
